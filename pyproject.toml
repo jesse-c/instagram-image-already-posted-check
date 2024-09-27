@@ -8,11 +8,16 @@ package-mode = false
 
 [tool.poetry.dependencies]
 python = "^3.10"
-torch = "^2.4.0"
-torchvision = "^0.19.1"
 pillow = "^10.4.0"
-coremltools = "^8.0"
-
+numpy = "<2"
+clip-benchmark = ">=1.4.0"
+datasets = ">=2.8.0"
+open-clip-torch = ">=2.20.0"
+timm = ">=0.9.5"
+torch = "^1.13.1"
+torchvision = "^0.14.1"
+mobileclip = {path = "/Users/jesse/src/github.com/apple/ml-mobileclip", develop = true}
+tqdm = "^4.66.5"
 
 [build-system]
 requires = ["poetry-core"]
