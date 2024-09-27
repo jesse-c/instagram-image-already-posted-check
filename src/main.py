@@ -309,10 +309,17 @@ async def main():
             f"  {model}: {data['least_similar_pair'][0]} and {data['least_similar_pair'][1]} (Similarity: {data['least_similar_pair'][2]:.4f})"
         )
 
-    await compare_new_image(
-        Model.ResNet50,
-        "data/images/1165588029506164864.jpg",
-    )
+    next_folder = "next"
+    new_image_files = [
+        f for f in os.listdir(next_folder) if f.lower().endswith(".jpeg")
+    ]
+
+    for new_image_file in new_image_files:
+        new_image_path = os.path.join(next_folder, new_image_file)
+        await compare_new_image(
+            Model.ResNet50,
+            new_image_path,
+        )
 
 
 if __name__ == "__main__":
