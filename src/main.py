@@ -32,7 +32,7 @@ def get_model(model):
         case Model.MobileCLIP:
             model, _, preprocess = mobileclip.create_model_and_transforms(
                 "mobileclip_s2",
-                pretrained="/Users/jesse/.cache/huggingface/hub/models--pcuenq--MobileCLIP-S2/snapshots/22fec9d0b9b614cb270f3322bbb80bf98a3f9c2f/mobileclip_s2.pt",
+                pretrained=os.getenv("PRETRAINED_MOBILECLIP"),
             )
 
             def preprocess(image_path):
@@ -267,7 +267,6 @@ async def compare_new_image(
     )
 
     new_feature = torch.from_numpy(new_feature)
-    # new_feature = combine(new_feature)
     new_feature = new_feature.unsqueeze(0)
 
     similarities = torch.mm(new_feature, features.t()).squeeze()
