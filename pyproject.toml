@@ -18,6 +18,7 @@ torch = "^1.13.1"
 torchvision = "^0.14.1"
 mobileclip = {path = "/Users/jesse/src/github.com/apple/ml-mobileclip", develop = true}
 tqdm = "^4.66.5"
+onnxruntime = "^1.19.2"
 
 [build-system]
 requires = ["poetry-core"]
