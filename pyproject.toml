@@ -19,6 +19,11 @@ torchvision = "^0.14.1"
 mobileclip = {path = "/Users/jesse/src/github.com/apple/ml-mobileclip", develop = true}
 tqdm = "^4.66.5"
 onnxruntime = "^1.19.2"
+mlx = "^0.18.0"
+fastapi = "^0.115.0"
+uvicorn = "^0.31.0"
+python-multipart = "^0.0.12"
+pydantic = "^2.9.2"
 
 [build-system]
 requires = ["poetry-core"]
