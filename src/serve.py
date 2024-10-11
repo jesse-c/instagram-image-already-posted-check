@@ -304,10 +304,7 @@ async def compare_new_image(
         print(f"{i}. {valid_files[idx]} (Similarity: {similarities_np[idx]:.4f})")
 
 
-async def compare_new_image_binary(
-    model,
-    image,
-):
+async def compare_new_image_binary(model, image, top_k=5):
     embeddings_dir = f"data/embeddings_{model.value}"
     features, valid_files = await load_dataset(
         model,
@@ -315,83 +312,56 @@ async def compare_new_image_binary(
         embeddings_dir,
     )
 
-    print("A")
     model, _preprocess, postprocess, combine = get_model(model)
 
-    # ---
-
-    print("B")
     image = transform(image).unsqueeze(0)  # preprocess
-    print("C")
     embedding = await asyncio.to_thread(model.encode_image, image)
-    print("D")
     new_feature = postprocess(embedding)
 
-    # ---
-
-    print("E")
     new_feature = torch.from_numpy(new_feature)
-    print("F")
     new_feature = new_feature.unsqueeze(0)
 
-    print("G")
     similarities = torch.mm(new_feature, features.t()).squeeze()
-    print("H")
     similarities_np = similarities.cpu().detach().numpy()
 
-    top_k = 5
     top_indices = np.argsort(similarities_np)[::-1][:top_k]
 
-    print(f"\nTop {top_k} similar images to binary image:")
-    for i, idx in enumerate(top_indices, 1):
-        print(f"{i}. {valid_files[idx]} (Similarity: {similarities_np[idx]:.4f})")
+    results = []
+    for rank, idx in enumerate(top_indices, start=1):
+        similarity_percentage = similarities_np[idx]
+        results.append(
+            {
+                "rank": rank,
+                "filename": valid_files[idx],
+                "similarity_percentage": similarity_percentage,
+            }
+        )
+
+    return results
 
 
 class Embedding(BaseModel):
     embedding: List[float]
 
 
-@app.post("/predict", response_model=Embedding)
+class SimilarImage(BaseModel):
+    rank: int
+    filename: str
+    similarity_percentage: float
+
+
+class PredictionResponse(BaseModel):
+    similar_images: List[SimilarImage]
+
+
+@app.post("/predict", response_model=PredictionResponse)
 async def predict(image: Annotated[bytes, File()]):
     # Read and preprocess the image
     image = Image.open(io.BytesIO(image)).convert("RGB")
 
-    await compare_new_image_binary(
-        Model.ResNet50,
-        image,
-    )
+    similar_images = await compare_new_image_binary(Model.ResNet50, image, top_k=5)
 
-    img_preprocessed = transform(image)
-    img_tensor = img_preprocessed.unsqueeze(0).numpy()
-
-    # Path to your exported ONNX file
-    onnx_model_path = "resnet50_embeddings.onnx"
-
-    # Create an ONNX Runtime session
-    session = onnxruntime.InferenceSession(onnx_model_path)
-
-    # Get the input name of the model
-    input_name = session.get_inputs()[0].name
-
-    # Run inference
-    outputs = session.run(None, {input_name: img_tensor})
-
-    # The output should be a single tensor (the embeddings)
-    embeddings = outputs[0]
-
-    # Print the original shape of the embeddings
-    print(f"Original embeddings shape: {embeddings.shape}")
-
-    embeddings = embeddings.reshape(embeddings.shape[0], -1)
-    # Print the shape of the flattened embeddings
-    print(f"Flattened embeddings shape: {embeddings.shape}")
-
-    # Convert to list for JSON serialization
-    # embedding_list = [float(x) for x in embeddings]
-    embedding_list = embeddings.flatten().tolist()
-    embedding_list = []
-
-    return {"embedding": embedding_list}
+    return {"similar_images": similar_images}
 
 
 if __name__ == "__main__":

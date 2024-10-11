@@ -4,10 +4,10 @@ Mix.install([
   {:tesla, "~> 1.12"}
 ])
 
-defmodule EmbeddingClient do
+defmodule PredictionClient do
   use Tesla
 
-  def get_embedding(image_path) do
+  def get_similar_images(image_path) do
     url = "http://localhost:8800/predict"
 
     IO.puts("Sending request to #{url}")
@@ -27,10 +27,9 @@ defmodule EmbeddingClient do
     # Make the POST request
     case post(url, mp) do
       {:ok, %{status: 200, body: body}} ->
-        # Assuming the response is JSON with an "embedding" key
         case Jason.decode(body) do
-          {:ok, %{"embedding" => embedding}} ->
-            {:ok, Nx.tensor(embedding)}
+          {:ok, %{"similar_images" => similar_images}} ->
+            {:ok, similar_images}
 
           {:error, _} ->
             {:error, "Failed to parse response JSON"}
@@ -49,13 +48,15 @@ end
 image_path = "next/DSC01605.jpeg"
 
 # Run the client and print the result
-case EmbeddingClient.get_embedding(image_path) do
-  {:ok, tensor} ->
-    IO.puts("Successfully retrieved embedding:")
-    # IO.inspect(tensor, limit: :infinity)
-    IO.inspect(tensor)
-    IO.puts("Tensor shape: #{inspect(Nx.shape(tensor))}")
-    IO.puts("Tensor type: #{inspect(Nx.type(tensor))}")
+case PredictionClient.get_similar_images(image_path) do
+  {:ok, similar_images} ->
+    IO.puts("Successfully retrieved similar images:")
+    Enum.each(similar_images, fn image ->
+      IO.puts("Rank: #{image["rank"]}")
+      IO.puts("Filename: #{image["filename"]}")
+      IO.puts("Similarity: #{image["similarity_percentage"]}%")
+      IO.puts("---")
+    end)
 
   {:error, message} ->
     IO.puts("Error: #{message}")
