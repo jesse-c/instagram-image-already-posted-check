@@ -281,32 +281,32 @@ async def compare_new_image(
 
 
 async def main():
-    results = {}
-    for model in Model:
-        results[model.value] = await analyze_model(model)
+    # results = {}
+    # for model in Model:
+    #     results[model.value] = await analyze_model(model)
 
-    print("\nComparison of Models:")
-    for metric in [
-        "avg_similarity",
-        "median_similarity",
-        "min_similarity",
-        "max_similarity",
-    ]:
-        print(f"\n{metric.capitalize()}:")
-        for model, data in results.items():
-            print(f"  {model}: {data[metric]:.4f}")
+    # print("\nComparison of Models:")
+    # for metric in [
+    #     "avg_similarity",
+    #     "median_similarity",
+    #     "min_similarity",
+    #     "max_similarity",
+    # ]:
+    #     print(f"\n{metric.capitalize()}:")
+    #     for model, data in results.items():
+    #         print(f"  {model}: {data[metric]:.4f}")
 
-    print("\nMost Similar Pairs:")
-    for model, data in results.items():
-        print(
-            f"  {model}: {data['most_similar_pair'][0]} and {data['most_similar_pair'][1]} (Similarity: {data['most_similar_pair'][2]:.4f})"
-        )
+    # print("\nMost Similar Pairs:")
+    # for model, data in results.items():
+    #     print(
+    #         f"  {model}: {data['most_similar_pair'][0]} and {data['most_similar_pair'][1]} (Similarity: {data['most_similar_pair'][2]:.4f})"
+    #     )
 
-    print("\nLeast Similar Pairs:")
-    for model, data in results.items():
-        print(
-            f"  {model}: {data['least_similar_pair'][0]} and {data['least_similar_pair'][1]} (Similarity: {data['least_similar_pair'][2]:.4f})"
-        )
+    # print("\nLeast Similar Pairs:")
+    # for model, data in results.items():
+    #     print(
+    #         f"  {model}: {data['least_similar_pair'][0]} and {data['least_similar_pair'][1]} (Similarity: {data['least_similar_pair'][2]:.4f})"
+    #     )
 
     next_folder = "next"
     new_image_files = [
