@@ -1,44 +1,16 @@
-import io
-import onnxruntime
-from typing import Annotated
-
-from typing import List
-
-import torch
-from fastapi import FastAPI, File, UploadFile
-from PIL import Image
-from pydantic import BaseModel
-from torchvision import models, transforms
 import asyncio
+import io
 import os
-from enum import Enum
+from typing import Annotated, List
 
-import matplotlib.pyplot as plt
-import mobileclip
 import numpy as np
 import torch
 import torch.nn.functional as F
+from fastapi import FastAPI, File
 from PIL import Image
+from pydantic import BaseModel
 from torchvision import models, transforms
 from tqdm.asyncio import tqdm_asyncio
-
-
-app = FastAPI()
-
-# Define image preprocessing
-transform = transforms.Compose(
-    [
-        transforms.Resize(256),
-        transforms.CenterCrop(224),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-    ]
-)
-
-
-class Model(Enum):
-    MobileCLIP = "mobileclip"
-    ResNet50 = "resnet50"
 
 
 class ResNet50Wrapper(torch.nn.Module):
@@ -51,66 +23,42 @@ class ResNet50Wrapper(torch.nn.Module):
             return self.model(image).squeeze()
 
 
-def get_model(model):
-    match model:
-        case Model.MobileCLIP:
-            model, _, preprocess = mobileclip.create_model_and_transforms(
-                "mobileclip_s2",
-                pretrained=os.getenv("PRETRAINED_MOBILECLIP"),
-            )
+def get_model():
+    model = models.resnet50(pretrained=True)
+    model.eval()  # Set to evaluation mode
 
-            def preprocess(image_path):
-                image = Image.open(image_path).convert("RGB")
-                image_tensor = preprocess(image).unsqueeze(0)
+    # Remove the final classification layer to get embeddings
+    model = torch.nn.Sequential(*list(model.children())[:-1])
 
-                return image_tensor
+    # Wrap the model with our custom wrapper
+    model = ResNet50Wrapper(model)
 
-            def identity(x):
-                return x
+    def preprocess(image_binary):
+        transform = transforms.Compose(
+            [
+                transforms.Resize(256),
+                transforms.CenterCrop(224),
+                transforms.ToTensor(),
+                transforms.Normalize(
+                    mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+                ),
+            ]
+        )
 
-            def combine(features):
-                features = torch.cat(features)
-                features = F.normalize(features, p=2, dim=1)
-                return features
+        image_tensor = transform(image_binary).unsqueeze(0)
 
-            return model, preprocess, identity, combine
-        case Model.ResNet50:
-            model = models.resnet50(pretrained=True)
-            model.eval()  # Set to evaluation mode
+        return image_tensor
 
-            # Remove the final classification layer to get embeddings
-            model = torch.nn.Sequential(*list(model.children())[:-1])
+    def postprocess(embedding_tensor):
+        return embedding_tensor.squeeze().numpy()
 
-            # Wrap the model with our custom wrapper
-            model = ResNet50Wrapper(model)
+    def combine(features):
+        features = [f if f.dim() == 2 else f.unsqueeze(0) for f in features]
+        features = torch.cat(features, dim=0)
+        features = F.normalize(features, p=2, dim=1)
+        return features
 
-            def preprocess(image_path):
-                transform = transforms.Compose(
-                    [
-                        transforms.Resize(256),
-                        transforms.CenterCrop(224),
-                        transforms.ToTensor(),
-                        transforms.Normalize(
-                            mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
-                        ),
-                    ]
-                )
-
-                image = Image.open(image_path).convert("RGB")
-                image_tensor = transform(image).unsqueeze(0)
-
-                return image_tensor
-
-            def postprocess(embedding_tensor):
-                return embedding_tensor.squeeze().numpy()
-
-            def combine(features):
-                features = [f if f.dim() == 2 else f.unsqueeze(0) for f in features]
-                features = torch.cat(features, dim=0)
-                features = F.normalize(features, p=2, dim=1)
-                return features
-
-            return model, preprocess, postprocess, combine
+    return model, preprocess, postprocess, combine
 
 
 def get_embedding_filename(image_path):
@@ -132,7 +80,7 @@ async def load_and_process_image(
         if os.path.exists(embedding_file):
             return torch.load(embedding_file)
 
-        embedding = get_image_embeddings(
+        embedding = await get_image_embeddings(
             image_path,
             preprocess,
             model,
@@ -157,8 +105,8 @@ async def get_image_embeddings(
     return embedding
 
 
-async def load_dataset(model, folder_path, embeddings_dir):
-    model, preprocess, postprocess, combine = get_model(model)
+async def load_dataset(folder_path, embeddings_dir):
+    model, preprocess, postprocess, combine = get_model()
 
     os.makedirs(embeddings_dir, exist_ok=True)
 
@@ -190,132 +138,9 @@ async def load_dataset(model, folder_path, embeddings_dir):
     return features, valid_files
 
 
-def analyse_dataset(features, valid_files, model):
-    print(f"\nAnalyzing dataset using {model}...")
-    similarity_matrix = torch.mm(features, features.t())
-
-    similarity_matrix_np = similarity_matrix.cpu().detach().numpy()
-
-    np.fill_diagonal(similarity_matrix_np, 0)
-    similarities = similarity_matrix_np.flatten()
-    similarities = similarities[similarities != 0]
-
-    avg_similarity = np.mean(similarities)
-    median_similarity = np.median(similarities)
-    min_similarity = np.min(similarities)
-    max_similarity = np.max(similarities)
-
-    print(f"\nDataset Analysis Results for {model}:")
-    print(f"Number of images: {len(valid_files)}")
-    print(f"Average similarity: {avg_similarity:.4f}")
-    print(f"Median similarity: {median_similarity:.4f}")
-    print(f"Min similarity: {min_similarity:.4f}")
-    print(f"Max similarity: {max_similarity:.4f}")
-
-    most_similar_idx = np.unravel_index(
-        np.argmax(similarity_matrix_np), similarity_matrix_np.shape
-    )
-    least_similar_idx = np.unravel_index(
-        np.argmin(similarity_matrix_np), similarity_matrix_np.shape
-    )
-
-    print(f"\nMost similar pair:")
-    print(
-        f"  {valid_files[most_similar_idx[0]]} and {valid_files[most_similar_idx[1]]}"
-    )
-    print(f"  Similarity: {similarity_matrix_np[most_similar_idx]:.4f}")
-
-    print(f"\nLeast similar pair:")
-    print(
-        f"  {valid_files[least_similar_idx[0]]} and {valid_files[least_similar_idx[1]]}"
-    )
-    print(f"  Similarity: {similarity_matrix_np[least_similar_idx]:.4f}")
-
-    plt.figure(figsize=(10, 6))
-    plt.hist(similarities, bins=50, edgecolor="black")
-    plt.title(f"Distribution of Image Similarities ({model})")
-    plt.xlabel("Similarity")
-    plt.ylabel("Frequency")
-    plt.savefig(f"similarity_distribution_{model}.png")
-    print(
-        f"\nSimilarity distribution histogram saved as 'similarity_distribution_{model}.png'"
-    )
-
-    return {
-        "avg_similarity": avg_similarity,
-        "median_similarity": median_similarity,
-        "min_similarity": min_similarity,
-        "max_similarity": max_similarity,
-        "most_similar_pair": (
-            valid_files[most_similar_idx[0]],
-            valid_files[most_similar_idx[1]],
-            similarity_matrix_np[most_similar_idx],
-        ),
-        "least_similar_pair": (
-            valid_files[least_similar_idx[0]],
-            valid_files[least_similar_idx[1]],
-            similarity_matrix_np[least_similar_idx],
-        ),
-    }
-
-
-async def analyze_model(model):
-    embeddings_dir = f"data/embeddings_{model.value}"
-    features, valid_files = await load_dataset(
-        model,
-        "data/images",
-        embeddings_dir,
-    )
-    print(f"Processed {len(valid_files)} images using {model.value}")
-    return analyse_dataset(features, valid_files, model.value)
-
-
-async def compare_new_image(
-    model,
-    new_image_path,
-):
-    embeddings_dir = f"data/embeddings_{model.value}"
-    features, valid_files = await load_dataset(
-        model,
-        "data/images",
-        embeddings_dir,
-    )
-
-    encoder, preprocess, postprocess, combine = get_model(model)
-
-    new_feature = await get_image_embeddings(
-        new_image_path,
-        preprocess,
-        encoder,
-        postprocess,
-    )
-
-    new_feature = torch.from_numpy(new_feature)
-    new_feature = new_feature.unsqueeze(0)
-
-    similarities = torch.mm(new_feature, features.t()).squeeze()
-    similarities_np = similarities.cpu().detach().numpy()
-
-    top_k = 5
-    top_indices = np.argsort(similarities_np)[::-1][:top_k]
-
-    print(f"\nTop {top_k} similar images to {os.path.basename(new_image_path)}:")
-    for i, idx in enumerate(top_indices, 1):
-        print(f"{i}. {valid_files[idx]} (Similarity: {similarities_np[idx]:.4f})")
-
-
-async def compare_new_image_binary(model, image, top_k=5):
-    embeddings_dir = f"data/embeddings_{model.value}"
-    features, valid_files = await load_dataset(
-        model,
-        "data/images",
-        embeddings_dir,
-    )
-
-    model, _preprocess, postprocess, combine = get_model(model)
-
-    image = transform(image).unsqueeze(0)  # preprocess
-    embedding = await asyncio.to_thread(model.encode_image, image)
+async def compare_new_image_binary(image, top_k=5):
+    image_tensor = preprocess(image)
+    embedding = await asyncio.to_thread(model.encode_image, image_tensor)
     new_feature = postprocess(embedding)
 
     new_feature = torch.from_numpy(new_feature)
@@ -340,10 +165,6 @@ async def compare_new_image_binary(model, image, top_k=5):
     return results
 
 
-class Embedding(BaseModel):
-    embedding: List[float]
-
-
 class SimilarImage(BaseModel):
     rank: int
     filename: str
@@ -354,12 +175,20 @@ class PredictionResponse(BaseModel):
     similar_images: List[SimilarImage]
 
 
+app = FastAPI()
+
+model, preprocess, postprocess, combine = get_model()
+
+# Load dataset once at startup
+embeddings_dir = "data/embeddings_resnet50"
+features, valid_files = asyncio.run(load_dataset("data/images", embeddings_dir))
+
+
 @app.post("/predict", response_model=PredictionResponse)
 async def predict(image: Annotated[bytes, File()]):
-    # Read and preprocess the image
     image = Image.open(io.BytesIO(image)).convert("RGB")
 
-    similar_images = await compare_new_image_binary(Model.ResNet50, image, top_k=5)
+    similar_images = await compare_new_image_binary(image, top_k=5)
 
     return {"similar_images": similar_images}
 
