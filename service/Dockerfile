@@ -18,15 +18,19 @@ ADD . /app
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
 
+ENV PATH="/app/.venv/bin:$PATH"
+
+# Download the model
+RUN python -c "import torch; import torchvision.models as models; model = models.resnet50(pretrained=True); torch.save(model.state_dict(), 'resnet50_model.pth')"
 
 # Then, use a final image without uv
 FROM python:3.11-slim-bookworm
 
 # Copy the application from the builder
+COPY --from=builder --chown=app:app /app /app
+COPY --from=builder --chown=app:app /app/resnet50_model.pth /app/resnet50_model.pth
 
 WORKDIR /app
-
-COPY --from=builder --chown=app:app /app /app
 
 # Place executables in the environment at the front of the path
 ENV PATH="/app/.venv/bin:$PATH"
