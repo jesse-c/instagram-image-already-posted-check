@@ -8,15 +8,13 @@ ENV UV_LINK_MODE=copy
 
 WORKDIR /app
 
-RUN --mount=type=cache,target=/root/.cache/uv \
-    --mount=type=bind,source=uv.lock,target=uv.lock \
-    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
-    uv sync --frozen --no-install-project --no-dev
+ADD pyproject.toml uv.lock /app
+
+RUN uv sync --frozen --no-install-project --no-dev
 
 ADD . /app
 
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev
+RUN uv sync --frozen --no-dev
 
 # Then, use a final image without uv
 FROM python:3.11-slim-bookworm
