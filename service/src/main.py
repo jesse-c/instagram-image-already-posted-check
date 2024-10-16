@@ -11,7 +11,6 @@ from fastapi import FastAPI, File, UploadFile
 from PIL import Image
 from pydantic import BaseModel
 from torchvision import models, transforms
-import torch
 
 
 class SimilarImage(BaseModel):
@@ -34,7 +33,7 @@ class ImageSimilarityModel:
         self.valid_files = None
 
     def _get_model(self):
-        model_path = 'resnet50_model.pth'
+        model_path = "resnet50_model.pth"
         if not os.path.exists(model_path):
             model = models.resnet50(pretrained=True)
             torch.save(model.state_dict(), model_path)
