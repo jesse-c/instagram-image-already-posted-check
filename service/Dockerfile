@@ -32,8 +32,5 @@ ENV PATH="/app/.venv/bin:$PATH"
 # Download the model
 RUN python -c "import torch; import torchvision.models as models; model = models.resnet50(pretrained=True); torch.save(model.state_dict(), 'resnet50_model.pth')"
 
-# Make port available to the world outside this container
-EXPOSE 8800
-
 # Run app.py when the container launches
 CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8800"]
