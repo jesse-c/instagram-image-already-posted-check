@@ -5,12 +5,24 @@ import os
 from typing import List
 
 import numpy as np
+import structlog
 import torch
 import torch.nn.functional as F
 from fastapi import FastAPI, File, UploadFile
+from fastapi_structlog import LogSettings, setup_logger, BaseSettingsModel
 from PIL import Image
 from pydantic import BaseModel
 from torchvision import models, transforms
+
+os.environ["LOG__JSON_LOGS"] = "False"
+
+
+class Settings(BaseSettingsModel):
+    log: LogSettings
+
+
+settings = Settings()
+logger = structlog.get_logger()
 
 
 class SimilarImage(BaseModel):
@@ -158,6 +170,7 @@ app = FastAPI(lifespan=lifespan)
 
 @app.post("/predict", response_model=PredictionResponse)
 async def predict(image: UploadFile = File(...)):
+    logger.info("Loading image...")
     contents = await image.read()
     img = Image.open(io.BytesIO(contents)).convert("RGB")
     similar_images = await image_similarity_model.compare_new_image(img, top_k=5)
@@ -167,6 +180,19 @@ async def predict(image: UploadFile = File(...)):
 if __name__ == "__main__":
     import uvicorn
 
+    setup_logger(settings.log)
+
     port = int(os.getenv("PORT", 8800))
     host = os.getenv("HOST", "0.0.0.0")
-    uvicorn.run(app, host=host, port=port)
+
+    uvicorn.run(
+        app,
+        host=host,
+        port=port,
+        reload=False,
+        access_log=False,
+        log_config={
+            "version": 1,
+            "disable_existing_loggers": False,
+        },
+    )
