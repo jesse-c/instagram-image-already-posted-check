@@ -33,4 +33,4 @@ ENV PATH="/app/.venv/bin:$PATH"
 RUN python -c "import torch; import torchvision.models as models; model = models.resnet50(pretrained=True); torch.save(model.state_dict(), 'resnet50_model.pth')"
 
 # Run app.py when the container launches
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8800"]
+CMD ["python", "src/main.py"]

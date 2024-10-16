@@ -162,3 +162,11 @@ async def predict(image: UploadFile = File(...)):
     img = Image.open(io.BytesIO(contents)).convert("RGB")
     similar_images = await image_similarity_model.compare_new_image(img, top_k=5)
     return {"similar_images": similar_images}
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    port = int(os.getenv("PORT", 8800))
+    host = os.getenv("HOST", "0.0.0.0")
+    uvicorn.run(app, host=host, port=port)
