@@ -1,20 +1,43 @@
-from contextlib import asynccontextmanager
 import asyncio
+import concurrent.futures
 import io
 import os
-from typing import List
+from contextlib import asynccontextmanager
+from enum import Enum
+from typing import Any, List, Optional, Tuple
 
+import boto3
 import numpy as np
 import structlog
 import torch
 import torch.nn.functional as F
 from fastapi import FastAPI, File, UploadFile
-from fastapi_structlog import LogSettings, setup_logger, BaseSettingsModel
+from fastapi_structlog import BaseSettingsModel, LogSettings, setup_logger
 from PIL import Image
 from pydantic import BaseModel
 from torchvision import models, transforms
 
 os.environ["LOG__JSON_LOGS"] = "False"
+
+
+def get_client(
+    region_name: str,
+    profile_name: Optional[str] = None,
+    aws_access_key_id: Optional[str] = None,
+    aws_secret_access_key: Optional[str] = None,
+) -> Any:
+    if profile_name:
+        session = boto3.Session(profile_name=profile_name)
+        return session.client("s3", region_name=region_name)
+    elif aws_access_key_id and aws_secret_access_key:
+        return boto3.client(
+            "s3",
+            region_name=region_name,
+            aws_access_key_id=aws_access_key_id,
+            aws_secret_access_key=aws_secret_access_key,
+        )
+    else:
+        raise ValueError("neither authentication method provided")
 
 
 class Settings(BaseSettingsModel):
@@ -33,6 +56,11 @@ class SimilarImage(BaseModel):
 
 class PredictionResponse(BaseModel):
     similar_images: List[SimilarImage]
+
+
+class Source(Enum):
+    local = "local"
+    remote = "remote"
 
 
 class ImageSimilarityModel:
@@ -79,15 +107,28 @@ class ImageSimilarityModel:
 
         return combine
 
-    async def load_dataset(self, folder_path: str, embeddings_dir: str):
+    async def load_dataset(self, source: Source):
+        match source:
+            case Source.local:
+                logger.info("loading local dataset")
+                await self.load_dataset_local()
+                logger.info("loaded local dataset")
+            case Source.remote:
+                logger.info("loading remote dataset")
+                await self.load_dataset_remote()
+                logger.info("loaded remote dataset")
+
+    async def load_dataset_local(self):
+        image_dir = "data/images"
+        embeddings_dir = "data/embeddings_resnet50"
         os.makedirs(embeddings_dir, exist_ok=True)
         image_files = [
-            f for f in os.listdir(folder_path) if f.lower().endswith((".jpg", ".jpeg"))
+            f for f in os.listdir(image_dir) if f.lower().endswith((".jpg", ".jpeg"))
         ]
 
         tasks = [
             self.load_and_process_image(
-                os.path.join(folder_path, img_file), embeddings_dir
+                os.path.join(image_dir, img_file), embeddings_dir
             )
             for img_file in image_files
         ]
@@ -102,6 +143,85 @@ class ImageSimilarityModel:
 
         self.features = self.combine(features)
         self.valid_files = valid_files
+
+    async def load_dataset_remote(self):
+        region_name: Optional[str] = os.getenv("REGION_NAME")
+        if region_name is None:
+            raise ValueError("missing region name")
+        bucket_name: Optional[str] = os.getenv("BUCKET_NAME")
+        if bucket_name is None:
+            raise ValueError("missing bucket name")
+
+        profile_name: Optional[str] = os.getenv("PROFILE_NAME")
+        aws_access_key_id: Optional[str] = os.getenv("AWS_ACCESS_KEY_ID")
+        aws_secret_access_key: Optional[str] = os.getenv("AWS_SECRET_ACCESS_KEY")
+
+        if profile_name:
+            logger.info("Using AWS profile for authentication")
+            s3_client = get_client(region_name, profile_name=profile_name)
+        elif aws_access_key_id and aws_secret_access_key:
+            logger.info("Using AWS access key and secret for authentication")
+            s3_client = get_client(
+                region_name,
+                aws_access_key_id=aws_access_key_id,
+                aws_secret_access_key=aws_secret_access_key,
+            )
+        else:
+            raise ValueError("neither authentication method provided")
+
+        local_image_dir = "data/images"
+        local_embeddings_dir = "data/embeddings_resnet50"
+        os.makedirs(local_image_dir, exist_ok=True)
+        os.makedirs(local_embeddings_dir, exist_ok=True)
+
+        # Download images
+        logger.info("Downloading images from S3...")
+        self.download_s3_folder(
+            s3_client,
+            bucket_name,
+            "images/",
+            local_image_dir,
+        )
+        logger.info("Downloaded images from S3...")
+
+        # Download embeddings
+        logger.info("Downloading embeddings from S3...")
+        self.download_s3_folder(
+            s3_client,
+            bucket_name,
+            "embeddings_resnet50/",
+            local_embeddings_dir,
+        )
+        logger.info("Downloaded embeddings from S3...")
+
+        # Load the dataset from local files
+        await self.load_dataset_local()
+
+    def download_file(self, args: Tuple[Any, str, str, str]) -> str:
+        s3_client, bucket_name, s3_file, local_file = args
+        try:
+            s3_client.download_file(bucket_name, s3_file, local_file)
+            return f"Successfully downloaded {s3_file} to {local_file}"
+        except Exception as e:
+            return f"Error downloading {s3_file}: {str(e)}"
+
+    def download_s3_folder(
+        self, s3_client, bucket_name, s3_folder, local_dir, max_workers: int = 10
+    ):
+        paginator = s3_client.get_paginator("list_objects_v2")
+        download_args = []
+        for result in paginator.paginate(Bucket=bucket_name, Prefix=s3_folder):
+            if "Contents" in result:
+                for file in result["Contents"]:
+                    s3_file = file["Key"]
+                    local_file = os.path.join(local_dir, os.path.basename(s3_file))
+                    download_args.append((s3_client, bucket_name, s3_file, local_file))
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            results = list(executor.map(self.download_file, download_args))
+
+        for result in results:
+            logger.info(result)
 
     async def load_and_process_image(self, image_path: str, embeddings_dir: str):
         embedding_file = os.path.join(
@@ -159,7 +279,8 @@ async def lifespan(app: FastAPI):
     # Load the ML model
     global image_similarity_model
     image_similarity_model = ImageSimilarityModel()
-    await image_similarity_model.load_dataset("data/images", "data/embeddings_resnet50")
+    source = Source(os.getenv("SOURCE"))
+    await image_similarity_model.load_dataset(source)
     yield
     # Clean up the ML models and release the resources
     image_similarity_model = None

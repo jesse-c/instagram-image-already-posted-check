@@ -1,14 +1,6 @@
-# /// script
-# requires-python = ">=3.11"
-# dependencies = [
-#     "boto3",
-#     "structlog",
-# ]
-# ///
-
-import os
 import concurrent.futures
-from typing import Optional, List, Tuple, Any
+import os
+from typing import Any, List, Optional, Tuple
 
 import boto3
 import structlog
