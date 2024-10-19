@@ -203,7 +203,9 @@ class ImageSimilarityModel:
             s3_client.download_file(bucket_name, s3_file, local_file)
             return f"Successfully downloaded {s3_file} to {local_file}"
         except Exception as e:
-            return f"Error downloading {s3_file}: {str(e)}"
+            result = f"Error downloading {s3_file}: {str(e)}"
+            logger.info(result)
+            return result
 
     def download_s3_folder(
         self, s3_client, bucket_name, s3_folder, local_dir, max_workers: int = 10
@@ -219,9 +221,6 @@ class ImageSimilarityModel:
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
             results = list(executor.map(self.download_file, download_args))
-
-        for result in results:
-            logger.info(result)
 
     async def load_and_process_image(self, image_path: str, embeddings_dir: str):
         embedding_file = os.path.join(
