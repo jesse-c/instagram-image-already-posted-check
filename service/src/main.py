@@ -11,7 +11,8 @@ import numpy as np
 import structlog
 import torch
 import torch.nn.functional as F
-from fastapi import FastAPI, File, UploadFile
+from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi.staticfiles import StaticFiles
 from fastapi_structlog import BaseSettingsModel, LogSettings, setup_logger
 from PIL import Image
 from pydantic import BaseModel
@@ -287,6 +288,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+app.mount("/images", StaticFiles(directory="data/images"), name="images")
 
 @app.post("/predict", response_model=PredictionResponse)
 async def predict(image: UploadFile = File(...)):
