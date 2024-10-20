@@ -1,14 +1,23 @@
 Mix.install([
   {:jason, "~> 1.4.4"},
   {:nx, "~> 0.9.0"},
-  {:tesla, "~> 1.12"}
+  {:tesla, "~> 1.12"},
+  {:hackney, "~> 1.20.1"}
 ])
 
 defmodule PredictionClient do
   use Tesla
 
+  plug Tesla.Middleware.Logger
+
+  adapter Tesla.Adapter.Hackney, [
+    transport_opts: [
+      inet6: true
+    ]
+  ]
+
   def get_similar_images(image_path) do
-    url = "http://localhost:8800/predict"
+    url = "http://[::1]:8800/predict"
 
     IO.puts("Sending request to #{url}")
     IO.puts("File: #{Path.basename(image_path)}")
@@ -23,6 +32,7 @@ defmodule PredictionClient do
     mp =
       Tesla.Multipart.new()
       |> Tesla.Multipart.add_file_content(image_data, filename, name: "image")
+      # |> Tesla.Multipart.add_file_content(image_data, filename, name: "image", detect_content_type: true)
 
     # Make the POST request
     case post(url, mp) do
@@ -51,6 +61,7 @@ image_path = "next/DSC01605.jpeg"
 case PredictionClient.get_similar_images(image_path) do
   {:ok, similar_images} ->
     IO.puts("Successfully retrieved similar images:")
+
     Enum.each(similar_images, fn image ->
       IO.puts("Rank: #{image["rank"]}")
       IO.puts("Filename: #{image["filename"]}")

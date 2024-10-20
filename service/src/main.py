@@ -303,7 +303,7 @@ if __name__ == "__main__":
     setup_logger(settings.log)
 
     port = int(os.getenv("PORT", 8800))
-    host = os.getenv("HOST", "0.0.0.0")
+    host = os.getenv("HOST", "::") # or IPv4: 0.0.0.0
 
     uvicorn.run(
         app,
