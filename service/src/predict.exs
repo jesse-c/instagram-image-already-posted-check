@@ -66,6 +66,7 @@ case PredictionClient.get_similar_images(image_path) do
       IO.puts("Rank: #{image["rank"]}")
       IO.puts("Filename: #{image["filename"]}")
       IO.puts("Similarity: #{image["similarity_percentage"]}%")
+      IO.puts("Base64: #{String.slice(image["image_base64"], 0, 10)}")
       IO.puts("---")
     end)
 

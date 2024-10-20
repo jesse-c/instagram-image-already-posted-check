@@ -11,7 +11,8 @@ import numpy as np
 import structlog
 import torch
 import torch.nn.functional as F
-from fastapi import FastAPI, File, UploadFile, HTTPException
+import base64
+from fastapi import FastAPI, File, UploadFile
 from fastapi.staticfiles import StaticFiles
 from fastapi_structlog import BaseSettingsModel, LogSettings, setup_logger
 from PIL import Image
@@ -53,6 +54,7 @@ class SimilarImage(BaseModel):
     rank: int
     filename: str
     similarity_percentage: float
+    image_base64: str
 
 
 class PredictionResponse(BaseModel):
@@ -260,14 +262,23 @@ class ImageSimilarityModel:
 
         top_indices = np.argsort(similarities_np)[::-1][:top_k]
 
-        return [
-            {
-                "rank": rank,
-                "filename": self.valid_files[idx],
-                "similarity_percentage": float(similarities_np[idx]),
-            }
-            for rank, idx in enumerate(top_indices, start=1)
-        ]
+        results = []
+        for rank, idx in enumerate(top_indices, start=1):
+            filename = self.valid_files[idx]
+            image_path = os.path.join("data/images", filename)
+            with open(image_path, "rb") as img_file:
+                image_base64 = base64.b64encode(img_file.read()).decode("utf-8")
+
+            results.append(
+                {
+                    "rank": rank,
+                    "filename": filename,
+                    "similarity_percentage": float(similarities_np[idx]),
+                    "image_base64": image_base64,
+                }
+            )
+
+        return results
 
 
 # Global variable to store the model
