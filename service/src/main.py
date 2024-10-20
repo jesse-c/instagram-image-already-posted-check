@@ -290,6 +290,7 @@ app = FastAPI(lifespan=lifespan)
 
 app.mount("/images", StaticFiles(directory="data/images"), name="images")
 
+
 @app.post("/predict", response_model=PredictionResponse)
 async def predict(image: UploadFile = File(...)):
     logger.info("Loading image...")
@@ -305,7 +306,7 @@ if __name__ == "__main__":
     setup_logger(settings.log)
 
     port = int(os.getenv("PORT", 8800))
-    host = os.getenv("HOST", "::") # or IPv4: 0.0.0.0
+    host = os.getenv("HOST", "::")  # or IPv4: 0.0.0.0
 
     uvicorn.run(
         app,
