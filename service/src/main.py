@@ -210,6 +210,44 @@ class ImageSimilarityModel:
             logger.info(result)
             return result
 
+    def upload_candidate_image(self, image_data: bytes, filename: str) -> None:
+        region_name: Optional[str] = os.getenv("REGION_NAME")
+        if region_name is None:
+            raise ValueError("missing region name")
+        bucket_name: Optional[str] = os.getenv("BUCKET_NAME")
+        if bucket_name is None:
+            raise ValueError("missing bucket name")
+
+        profile_name: Optional[str] = os.getenv("PROFILE_NAME")
+        aws_access_key_id: Optional[str] = os.getenv("AWS_ACCESS_KEY_ID")
+        aws_secret_access_key: Optional[str] = os.getenv("AWS_SECRET_ACCESS_KEY")
+
+        if profile_name:
+            logger.info("Using AWS profile for authentication")
+            s3_client = get_client(region_name, profile_name=profile_name)
+        elif aws_access_key_id and aws_secret_access_key:
+            logger.info("Using AWS access key and secret for authentication")
+            s3_client = get_client(
+                region_name,
+                aws_access_key_id=aws_access_key_id,
+                aws_secret_access_key=aws_secret_access_key,
+            )
+        else:
+            raise ValueError("neither authentication method provided")
+
+        s3_key = f"candidates/{filename}"
+        try:
+            s3_client.put_object(
+                Bucket=bucket_name,
+                Key=s3_key,
+                Body=image_data,
+                ContentType="image/jpeg",
+            )
+            logger.info(f"Uploaded candidate image to s3://{bucket_name}/{s3_key}")
+        except Exception as e:
+            logger.error(f"Failed to upload candidate image: {str(e)}")
+            raise
+
     def download_s3_folder(
         self, s3_client, bucket_name, s3_folder, local_dir, max_workers: int = 10
     ):
@@ -308,6 +346,16 @@ async def predict(image: UploadFile = File(...)):
     contents = await image.read()
     img = Image.open(io.BytesIO(contents)).convert("RGB")
     similar_images = await image_similarity_model.compare_new_image(img, top_k=5)
+
+    try:
+        await asyncio.to_thread(
+            image_similarity_model.upload_candidate_image,
+            contents,
+            image.filename,
+        )
+    except Exception as e:
+        logger.error(f"Failed to upload candidate image: {str(e)}")
+
     return {"similar_images": similar_images}
 
 
