@@ -261,7 +261,7 @@ class ImageSimilarityModel:
                     download_args.append((s3_client, bucket_name, s3_file, local_file))
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            results = list(executor.map(self.download_file, download_args))
+            list(executor.map(self.download_file, download_args))
 
     async def load_and_process_image(self, image_path: str, embeddings_dir: str):
         embedding_file = os.path.join(
