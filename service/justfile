@@ -1,0 +1,10 @@
+build-image version="latest":
+    docker build -t image-similarity-service:{{version}} .
+
+run-image version="latest" source="local":
+  docker run -it --rm \
+  -e SOURCE={{source}} \
+  -e AWS_ACCESS_KEY_ID \
+  -e AWS_SECRET_ACCESS_KEY \
+  -e AWS_REGION \
+  image-similarity-service:{{version}}
