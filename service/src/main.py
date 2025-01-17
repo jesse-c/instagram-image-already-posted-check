@@ -21,6 +21,8 @@ from torchvision import models, transforms
 
 os.environ["LOG__JSON_LOGS"] = "False"
 
+TOP_k = 5
+
 
 def get_client(
     region_name: str,
@@ -345,7 +347,7 @@ async def predict(image: UploadFile = File(...)):
     logger.info("Loading image...")
     contents = await image.read()
     img = Image.open(io.BytesIO(contents)).convert("RGB")
-    similar_images = await image_similarity_model.compare_new_image(img, top_k=5)
+    similar_images = await image_similarity_model.compare_new_image(img, top_k=TOP_K)
 
     try:
         await asyncio.to_thread(
