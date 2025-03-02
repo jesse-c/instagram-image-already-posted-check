@@ -21,7 +21,7 @@ from torchvision import models, transforms
 
 os.environ["LOG__JSON_LOGS"] = "False"
 
-TOP_k = 5
+TOP_K = 5
 
 
 def get_client(
@@ -291,7 +291,7 @@ class ImageSimilarityModel:
             embedding = await asyncio.to_thread(self.model, image_tensor)
             return self.postprocess(embedding)
 
-    async def compare_new_image(self, image: Image.Image, top_k: int = 5):
+    async def compare_new_image(self, image: Image.Image, top_k: int = TOP_K):
         image_tensor = self.preprocess(image).unsqueeze(0)
         with torch.no_grad():
             embedding = await asyncio.to_thread(self.model, image_tensor)
@@ -349,14 +349,15 @@ async def predict(image: UploadFile = File(...)):
     img = Image.open(io.BytesIO(contents)).convert("RGB")
     similar_images = await image_similarity_model.compare_new_image(img, top_k=TOP_K)
 
-    try:
-        await asyncio.to_thread(
-            image_similarity_model.upload_candidate_image,
-            contents,
-            image.filename,
-        )
-    except Exception as e:
-        logger.error(f"Failed to upload candidate image: {str(e)}")
+    if os.getenv("UPLOAD", "false").lower() == "true":
+        try:
+            await asyncio.to_thread(
+                image_similarity_model.upload_candidate_image,
+                contents,
+                image.filename,
+            )
+        except Exception as e:
+            logger.error(f"Failed to upload candidate image: {str(e)}")
 
     return {"similar_images": similar_images}
 
