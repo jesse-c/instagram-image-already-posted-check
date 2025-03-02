@@ -1,4 +1,4 @@
-FROM ghcr.io/astral-sh/uv:python3.11-bookworm-slim AS builder
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS builder
 
 # Enable bytecode compilation
 ENV UV_COMPILE_BYTECODE=1
@@ -17,7 +17,7 @@ ADD . /app
 RUN uv sync --frozen --no-dev
 
 # Then, use a final image without uv
-FROM python:3.13-slim-bookworm
+FROM python:3.12-slim-bookworm
 
 # Copy the application from the builder
 COPY --from=builder --chown=app:app /app /app

@@ -3,17 +3,17 @@ name = "service"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = "==3.12.*"
 dependencies = [
-    "boto3>=1.35.43",
-    "fastapi-structlog>=0.5.0",
-    "fastapi>=0.115.2",
-    "numpy>=2.1.2",
-    "pillow>=11.0.0",
-    "pydantic>=2.9.2",
-    "python-multipart>=0.0.12",
-    "structlog>=24.4.0",
-    "torch>=2.4.1",
-    "torchvision>=0.19.1",
-    "uvicorn>=0.32.0",
+    "boto3>=1.37.4",
+    "fastapi-structlog>=0.6.1",
+    "fastapi>=0.115.10",
+    "numpy>=2.2.3",
+    "pillow>=11.1.0",
+    "pydantic>=2.10.6",
+    "python-multipart>=0.0.20",
+    "structlog>=25.1.0",
+    "torch>=2.6.0",
+    "torchvision>=0.21.0",
+    "uvicorn>=0.34.0",
 ]
