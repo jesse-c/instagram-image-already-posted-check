@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = "==3.12.*"
 dependencies = [
     "boto3>=1.37.4",
-    "fastapi-structlog>=0.6.1",
+    "fastapi-structlog>=0.7.1",
     "fastapi>=0.115.10",
     "numpy>=2.2.3",
     "pillow>=11.1.0",
